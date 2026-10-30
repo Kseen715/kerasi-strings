@@ -1,18 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CHUNK_BYTES, Handler, MAX_RUN_BYTES } from './handler';
-import type { Engine } from './handler';
+import type { Engine, LoadNames } from './handler';
 import type { Request, Response } from './protocol';
-import { loadEngine } from './testing';
+import { loadEngine, loadNamesEngine } from './testing';
 
 function bytes(text: string): ArrayBuffer {
   return new TextEncoder().encode(text).buffer;
 }
 
-async function answers(request: Request, engine: Engine = loadEngine()) {
+const names = () => Promise.resolve(loadNamesEngine());
+
+async function answers(
+  request: Request,
+  engine: Engine = loadEngine(),
+  loadNames: LoadNames = names,
+) {
   const posted: Response[] = [];
-  await new Handler(engine, (response) => posted.push(response)).handle(
-    request,
-  );
+  const handler = new Handler(engine, (r) => posted.push(r), loadNames);
+  await handler.handle(request);
   return posted;
 }
 
@@ -83,7 +88,7 @@ describe('Handler', () => {
 
   it('stops a cancelled hash after the current chunk', async () => {
     const posted: Response[] = [];
-    const handler = new Handler(loadEngine(), (r) => posted.push(r));
+    const handler = new Handler(loadEngine(), (r) => posted.push(r), names);
     const blob = new Blob([new Uint8Array(CHUNK_BYTES * 3)]);
     const hashing = handler.handle({
       id: 7,
@@ -95,6 +100,56 @@ describe('Handler', () => {
     await handler.handle({ id: 7, kind: 'cancel' });
     await hashing;
     expect(posted.at(-1)).toEqual({ id: 7, kind: 'cancelled' });
+  });
+
+  it('loads the name table once, when a decode first meets \\N{', async () => {
+    const posted: Response[] = [];
+    const loadNames = vi.fn(names);
+    const handler = new Handler(loadEngine(), (r) => posted.push(r), loadNames);
+    const recipe = JSON.stringify([{ op: 'unicode.decode', enabled: true }]);
+    const run = (id: number, text: string) =>
+      handler.handle({
+        id,
+        kind: 'run',
+        recipe,
+        input: { bytes: bytes(text) },
+      });
+
+    await run(11, 'plain');
+    expect(loadNames).not.toHaveBeenCalled();
+    await run(12, String.raw`\N{BULLET} \N{bullet}`);
+    await run(13, String.raw`\N{EM DASH}`);
+    expect(loadNames).toHaveBeenCalledOnce();
+    const outputs = posted.map((r) => r.kind === 'run' && r.report.output);
+    expect(outputs.map((o) => o && o.value)).toEqual(['plain', '• •', '—']);
+  });
+
+  it('reads names on the board too', async () => {
+    const [response] = await answers({
+      id: 14,
+      kind: 'board',
+      options: '{}',
+      input: { bytes: bytes(String.raw`\N{BULLET}`) },
+    });
+    if (response?.kind !== 'board') throw new Error('no board');
+    const row = response.rows.find((r) => r.id === 'unicode.decode');
+    expect(row?.output?.value).toBe('•');
+  });
+
+  it('keeps the error when the name table does not load', async () => {
+    const [response] = await answers(
+      {
+        id: 15,
+        kind: 'board',
+        options: '{}',
+        input: { bytes: bytes(String.raw`\N{BULLET}`) },
+      },
+      loadEngine(),
+      () => Promise.reject(new Error('offline')),
+    );
+    if (response?.kind !== 'board') throw new Error('no board');
+    const row = response.rows.find((r) => r.id === 'unicode.decode');
+    expect(row?.error?.message).toMatch(/needs the Unicode name table/);
   });
 
   it('reports a bad recipe as an error that is not fatal', async () => {

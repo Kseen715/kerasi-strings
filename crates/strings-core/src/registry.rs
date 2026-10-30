@@ -1,7 +1,9 @@
 //! Every operation, and the metadata the UI is built from.
 
 use crate::op::{Group, Op, OpMeta};
-use crate::ops::{case, encode, hash, layout, punycode, translit, url};
+use crate::ops::{
+    case, encode, hash, layout, punycode, translit, unicode_escape, url,
+};
 use serde::Serialize;
 
 pub fn all() -> impl Iterator<Item = &'static Op> {
@@ -12,6 +14,7 @@ pub fn all() -> impl Iterator<Item = &'static Op> {
         .chain(encode::OPS)
         .chain(punycode::OPS)
         .chain(url::OPS)
+        .chain(unicode_escape::OPS)
         .chain(hash::OPS)
 }
 
@@ -68,7 +71,7 @@ mod tests {
         assert_eq!(count(Group::Case), 15);
         assert_eq!(count(Group::Layout), 2);
         assert_eq!(count(Group::Translit), 4);
-        assert_eq!(count(Group::Encode), 8);
+        assert_eq!(count(Group::Encode), 10);
         assert_eq!(count(Group::Hash), 6);
     }
 
@@ -95,7 +98,7 @@ mod tests {
         assert_eq!(meta["version"], crate::VERSION);
         assert_eq!(meta["groups"][1]["id"], "layout");
         assert_eq!(meta["groups"][1]["name"], "Keyboard layout");
-        assert_eq!(meta["ops"].as_array().unwrap().len(), 35);
+        assert_eq!(meta["ops"].as_array().unwrap().len(), 37);
 
         let encode = &meta["ops"][21];
         assert_eq!(encode["id"], "base64.encode");

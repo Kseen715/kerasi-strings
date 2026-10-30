@@ -29,6 +29,9 @@ describe('licenseAllowed', () => {
     expect(licenseAllowed('MIT OR Apache-2.0')).toBe(true);
     expect(licenseAllowed('Unlicense OR MIT')).toBe(true);
     expect(licenseAllowed('(MIT OR Apache-2.0) AND Unicode-3.0')).toBe(true);
+    expect(licenseAllowed('(MIT OR Apache-2.0) AND Unicode-DFS-2016')).toBe(
+      true,
+    );
     expect(licenseAllowed('GPL-3.0 OR MIT')).toBe(true);
   });
 
@@ -85,6 +88,25 @@ describe('components', () => {
   it('marks packages without a license field', () => {
     const dir = folder({ 'package.json': '{"name":"x","version":"0"}' });
     expect(npmComponent(dir).license).toBe('UNKNOWN');
+  });
+
+  it('adds the license files a crate keeps below its root', () => {
+    const dir = folder({
+      'LICENSE-MIT': 'mit',
+      'data/LICENSE-UNICODE': 'unicode',
+    });
+    const component = crateComponent({
+      id: 'unicode_names2',
+      name: 'unicode_names2',
+      version: '1.3.0',
+      license: '(MIT OR Apache-2.0) AND Unicode-DFS-2016',
+      source: 'registry',
+      manifest_path: join(dir, 'Cargo.toml'),
+    });
+    expect(component.texts).toEqual([
+      { file: 'LICENSE-MIT', text: 'mit' },
+      { file: 'data/LICENSE-UNICODE', text: 'unicode' },
+    ]);
   });
 
   it('follows normal and build dependencies of the root crate only', () => {

@@ -6,5 +6,6 @@ pub mod hash;
 pub mod layout;
 pub mod punycode;
 pub mod translit;
+pub mod unicode_escape;
 pub mod url;
 mod words;

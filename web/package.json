@@ -7,8 +7,10 @@
     "node": ">=24"
   },
   "scripts": {
-    "wasm": "wasm-pack build ../crates/strings-wasm --target web --out-dir ../../web/src/wasm --no-pack",
-    "dev": "npm run wasm -- --dev && vite",
+    "wasm": "npm run wasm:engine && npm run wasm:names",
+    "wasm:engine": "wasm-pack build ../crates/strings-wasm --target web --out-dir ../../web/src/wasm --no-pack",
+    "wasm:names": "wasm-pack build ../crates/strings-wasm-names --target web --out-dir ../../web/src/wasm --no-pack",
+    "dev": "npm run wasm:engine -- --dev && npm run wasm:names -- --dev && vite",
     "build": "npm run wasm && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",

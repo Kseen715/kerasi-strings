@@ -8,9 +8,17 @@ import type { Request } from './protocol';
 declare const self: DedicatedWorkerGlobalScope;
 
 const ready = init();
-const handler = new Handler(wasm, (response, transfer = []) => {
-  self.postMessage(response, transfer);
-});
+const handler = new Handler(
+  wasm,
+  (response, transfer = []) => {
+    self.postMessage(response, transfer);
+  },
+  async () => {
+    const names = await import('../wasm/strings_wasm_names.js');
+    await names.default();
+    return names;
+  },
+);
 
 self.onmessage = (event: MessageEvent<Request>) => {
   const request = event.data;

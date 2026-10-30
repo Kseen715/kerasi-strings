@@ -5,13 +5,15 @@ import { describe, expect, it } from 'vitest';
 import { BUDGETS, measure, report } from './budget';
 
 describe('budget', () => {
-  it('sums gzipped sizes per budgeted extension', () => {
+  it('sums gzipped sizes per budget', () => {
     const dir = mkdtempSync(join(tmpdir(), 'budget-'));
     writeFileSync(join(dir, 'a.js'), 'x'.repeat(1000));
     writeFileSync(join(dir, 'b.js'), 'y'.repeat(1000));
     writeFileSync(join(dir, 'c.css'), 'z');
+    writeFileSync(join(dir, 'strings_wasm_names_bg-1.wasm'), 'n');
+    writeFileSync(join(dir, 'strings_wasm_names-1.js'), 'n');
     const sizes = measure(dir);
-    expect(Object.keys(sizes)).toEqual(['.js']);
+    expect(Object.keys(sizes).sort()).toEqual(['.js', 'names']);
     expect(sizes['.js']).toBeGreaterThan(20);
     expect(sizes['.js']).toBeLessThan(200);
   });
@@ -22,6 +24,7 @@ describe('budget', () => {
     expect(ok.lines).toEqual([
       '.wasm 0.0 KB of 150 KB ok',
       '.js 1.0 KB of 120 KB ok',
+      'names 0.0 KB of 600 KB ok',
     ]);
     const over = report({ '.wasm': (BUDGETS['.wasm'] ?? 0) + 1 });
     expect(over.over).toBe(true);

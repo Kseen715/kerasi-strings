@@ -32,6 +32,21 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{html,js,css,wasm,woff2,svg,png,txt}'],
+        // The engine with the Unicode name table is about 500 KB gzipped
+        // and only `\N{...}` escapes need it: it is cached when first used
+        globIgnores: ['**/assets/strings_wasm_names*'],
+        runtimeCaching: [
+          {
+            // Written into the service worker as is, so a literal
+            urlPattern: /\/assets\/strings_wasm_names/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'unicode-names',
+              // Its script and WebAssembly; older builds drop out
+              expiration: { maxEntries: 2 },
+            },
+          },
+        ],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
       },

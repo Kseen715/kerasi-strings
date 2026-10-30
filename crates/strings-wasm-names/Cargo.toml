@@ -1,0 +1,18 @@
+[package]
+name = "strings-wasm-names"
+description = "The Kerasi Strings engine with the Unicode name table"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+strings-core = { workspace = true, features = ["names"] }
+strings-wasm.workspace = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz", "--enable-bulk-memory", "--enable-nontrapping-float-to-int"]

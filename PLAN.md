@@ -17,7 +17,7 @@ design canvas: https://claude.ai/artifact/QkSvYoirT1ta9rMnJ4dPkx
 | Case | lower case, UPPER CASE, Title Case, Sentence case, iNVERT cASE, camelCase, PascalCase, snake_case, SCREAMING_SNAKE_CASE, kebab-case, SCREAMING-KEBAB, Train-Case, dot.case, path/case, flatcase |
 | Keyboard layout | Fix layout (auto-detect), and explicit pairs between English (US QWERTY), Russian (ЙЦУКЕН), Ukrainian, German (QWERTZ), French (AZERTY) |
 | Transliteration | Russian in Latin letters: GOST 7.79-2000 system B, passport names (МИД 4271 / МВД 995, ICAO Doc 9303), URL slugs by the Yandex and Google tables |
-| Encode | Base64 encode / decode (standard + URL-safe, padding on/off), Base32 encode / decode (RFC 4648, padding on/off; Crockford later), Punycode encode / decode (RFC 3492, whole text or `xn--` domain labels), URL encode / decode (RFC 3986 percent-encoding, optional `+` for spaces) |
+| Encode | Base64 encode / decode (standard + URL-safe, padding on/off), Base32 encode / decode (RFC 4648, padding on/off; Crockford later), Punycode encode / decode (RFC 3492, whole text or `xn--` domain labels), URL encode / decode (RFC 3986 percent-encoding, optional `+` for spaces), Unicode escape encode / decode (Python's `unicode_escape`: `\xe9`, `\u043f`, `\U0001f600`; decode also joins surrogate pairs and reads `\N{name}` with the name table loaded on demand) |
 | Hash | MD5, SHA-1, SHA-224, SHA-256, SHA-384, SHA-512; output as hex, HEX or Base64 |
 
 **Note on "SHA-128":** no standard hash with that name exists. SHA-1 produces 160
@@ -58,9 +58,12 @@ crates/
     src/ops/encode.rs
     src/ops/punycode.rs
     src/ops/url.rs
+    src/ops/unicode_escape.rs
     src/ops/translit.rs
     src/ops/hash.rs
   strings-wasm/        # wasm-bindgen exports only, no logic
+    src/lib.rs
+  strings-wasm-names/  # the same exports, with the Unicode name table
     src/lib.rs
 ```
 
@@ -101,6 +104,7 @@ pub struct OpMeta {
 | `run(recipe_json: &str, input: &[u8]) -> Result<RunResult, JsError>` | Run a chain; `RunResult.output` is the bytes, `.report` JSON with the shown output and per-step trace (status, preview, bytes, error with offset, duration) |
 | `run_board(input: &[u8], options_json: &str) -> Result<String, JsError>` | Every op once on the same input, plus variants (Base64 URL); board-wide options (`format`, `to`) reach the ops that declare them |
 | `Hasher::new(ops, format)`, `.update(chunk)`, `.finish()` | Several hashes over a stream of chunks, for files of any size |
+| `take_names_wanted() -> bool` | Whether a decode met `\N{...}` without the name table since the last call; the worker then switches to the `strings-wasm-names` build and runs again |
 
 Showing bytes is the engine's job too: valid UTF-8 as text, anything else
 as hex pairs (`render.rs`), so the UI never decodes or formats bytes.
@@ -114,12 +118,12 @@ Recipe JSON: `[{"op":"layout.fix","params":{"to":"ru"}},{"op":"case.title"}]`.
 | MD5 / SHA-1 / SHA-2 | `md-5`, `sha1`, `sha2` (RustCrypto) | `default-features = false`; incremental `update()` enables chunked file hashing later |
 | Base64 and Base32 | `data-encoding` | *Decided:* one crate for both (no `base64`): RFC 4648 standard and URL-safe alphabets, padding on/off; Crockford/hex variants available later |
 | Word splitting for case styles | our own (`ops/words.rs`) | *Decided:* own splitter, no `heck` |
-| Punycode, URL encoding, transliteration | our own (`ops/punycode.rs`, `ops/url.rs`, `ops/translit.rs`) | *Decided (Oct 30, 2026):* no `idna` / `percent-encoding`: RFC 3492 is ~150 lines, and `idna` would add UTS 46 tables to the WASM. The domain mode lower-cases labels and applies no other IDNA mapping |
+| Punycode, URL encoding, Unicode escapes, transliteration | our own (`ops/punycode.rs`, `ops/url.rs`, `ops/unicode_escape.rs`, `ops/translit.rs`) | *Decided (Oct 30, 2026):* no `idna` / `percent-encoding`: RFC 3492 is ~150 lines, and `idna` would add UTS 46 tables to the WASM. The domain mode lower-cases labels and applies no other IDNA mapping. *Decided (Oct 30, 2026):* `\N{name}` reads the name table of `unicode_names2` (Unicode-DFS-2016 data license, allowed with Unicode-3.0). It is about 400 KB gzipped, so it ships in a second engine build (`strings-wasm-names`, core feature `names`) that the worker loads the first time a decode meets `\N{`, then runs the request again; the service worker caches it when first used instead of precaching it |
 | Bindings | `wasm-bindgen`, `serde`, `serde_json` | `serde-wasm-bindgen` is an alternative to JSON strings; JSON is simpler to debug |
 | Tests | `proptest` (dev) | round-trip properties |
 
 Release profile: `opt-level = "z"`, `lto = true`, `codegen-units = 1`,
-`panic = "abort"`, then `wasm-opt -Oz`. Budget: WASM ≤ 150 KB gzipped.
+`panic = "abort"`, then `wasm-opt -Oz`. Budget: WASM ≤ 150 KB gzipped. The on-demand names build has its own budget of 600 KB.
 
 ### 2.3 Operation semantics (the parts that need decisions)
 

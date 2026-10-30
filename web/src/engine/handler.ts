@@ -7,8 +7,12 @@ import type { BoardRow, Meta, Report } from './types';
 
 export type Engine = Pick<
   typeof Wasm,
-  'ops_meta' | 'run' | 'run_board' | 'Hasher'
+  'ops_meta' | 'run' | 'run_board' | 'Hasher' | 'take_names_wanted'
 >;
+
+/** Loads the engine built with the Unicode name table (about 500 KB
+ * gzipped), which only `\N{...}` escapes need */
+export type LoadNames = () => Promise<Engine>;
 
 /** Files are hashed in chunks of this size, with progress after each */
 export const CHUNK_BYTES = 4 * 1024 * 1024;
@@ -18,10 +22,12 @@ export const MAX_RUN_BYTES = 64 * 1024 * 1024;
 
 export class Handler {
   private readonly cancelled = new Set<number>();
+  private names: Promise<boolean> | undefined;
 
   constructor(
-    private readonly engine: Engine,
+    private engine: Engine,
     private readonly post: Post,
+    private readonly loadNames: LoadNames,
   ) {}
 
   async handle(request: Request): Promise<void> {
@@ -49,8 +55,10 @@ export class Handler {
         return this.run(request.id, request.recipe, request.input);
       case 'board': {
         const bytes = await bytesOf(request.input);
-        const json = this.engine.run_board(bytes, request.options);
-        const rows = JSON.parse(json) as BoardRow[];
+        const rows = await this.withNames(
+          (engine) =>
+            JSON.parse(engine.run_board(bytes, request.options)) as BoardRow[],
+        );
         this.post({ id: request.id, kind: 'board', rows });
         return;
       }
@@ -63,14 +71,41 @@ export class Handler {
   }
 
   private async run(id: number, recipe: string, input: Payload) {
-    const result = this.engine.run(recipe, await bytesOf(input));
-    const report = JSON.parse(result.report) as Report;
-    const output = result.output?.buffer as ArrayBuffer | undefined;
-    result.free();
+    const bytes = await bytesOf(input);
+    const { report, output } = await this.withNames((engine) => {
+      const result = engine.run(recipe, bytes);
+      const report = JSON.parse(result.report) as Report;
+      const output = result.output?.buffer as ArrayBuffer | undefined;
+      result.free();
+      return { report, output };
+    });
     this.post(
       { id, kind: 'run', report, ...(output && { output }) },
       output ? [output] : [],
     );
+  }
+
+  /** Runs `task`, and again on the engine with the name table when the
+   * first run met a `\N{...}` escape that it could not read. */
+  private async withNames<T>(task: (engine: Engine) => T): Promise<T> {
+    const result = task(this.engine);
+    if (!this.engine.take_names_wanted() || !(await this.namesLoaded())) {
+      return result;
+    }
+    return task(this.engine);
+  }
+
+  /** Loads the name table once; a failed load leaves the `\N{...}` error
+   * in place until the page is reloaded. */
+  private namesLoaded(): Promise<boolean> {
+    this.names ??= this.loadNames().then(
+      (engine) => {
+        this.engine = engine;
+        return true;
+      },
+      () => false,
+    );
+    return this.names;
   }
 
   private async hash(id: number, ops: string[], format: string, blob: Blob) {

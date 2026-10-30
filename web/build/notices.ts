@@ -22,20 +22,30 @@ export const ALLOWED = new Set([
   '0BSD',
   'Unlicense',
   'Unicode-3.0',
+  // The Unicode data license before Unicode-3.0, with the same terms
+  'Unicode-DFS-2016',
   'OFL-1.1',
   'MPL-2.0',
 ]);
 
-/** The precache-only service worker that vite-plugin-pwa generates
- * bundles these; closeBundle checks the list against the built file. */
+/** The service worker that vite-plugin-pwa generates (the precache, and
+ * the runtime cache of the Unicode name table) bundles these; closeBundle
+ * checks the list against the built file. */
 export const WORKBOX = [
   'workbox-core',
+  'workbox-expiration',
   'workbox-precaching',
   'workbox-routing',
   'workbox-strategies',
 ];
 
 const LICENSE_FILE = /^(licen[cs]e|copying|notice)/i;
+
+/** License files that a crate keeps below its root, where licenseTexts
+ * does not look */
+export const NESTED_LICENSES: Record<string, string[]> = {
+  unicode_names2: ['data/LICENSE-UNICODE'],
+};
 
 export interface Component {
   name: string;
@@ -160,12 +170,17 @@ export function crates(metadata: CargoMetadata, root: string): CargoPackage[] {
 }
 
 export function crateComponent(pkg: CargoPackage): Component {
+  const dir = dirname(pkg.manifest_path);
+  const nested = (NESTED_LICENSES[pkg.name] ?? []).map((file) => ({
+    file,
+    text: readFileSync(join(dir, file), 'utf8'),
+  }));
   return {
     name: pkg.name,
     version: pkg.version,
     license: pkg.license ?? 'UNKNOWN',
     source: `https://crates.io/crates/${pkg.name}`,
-    texts: licenseTexts(dirname(pkg.manifest_path)),
+    texts: [...licenseTexts(dir), ...nested],
   };
 }
 

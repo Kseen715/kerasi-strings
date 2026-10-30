@@ -1,4 +1,4 @@
-import { boardRow, expect, openApp, test } from './fixtures';
+import { ORIGIN, boardRow, expect, openApp, test } from './fixtures';
 
 test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 
@@ -54,4 +54,26 @@ test('switches themes on the whole page', async ({ page }) => {
     await page.getByLabel('Theme').selectOption(theme);
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
   }
+});
+
+test('loads the Unicode name table only for a \\N{...} escape', async ({
+  page,
+}) => {
+  const names: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('strings_wasm_names')) {
+      names.push(request.url());
+    }
+  });
+  await openApp(page);
+  const input = page.getByLabel(/01 — Input/);
+
+  await input.fill(String.raw`п\xe9`);
+  await expect(boardRow(page, 'Unicode escape decode')).toHaveText('пé');
+  expect(names).toEqual([]);
+
+  await input.fill(String.raw`\N{BULLET} \N{em dash}`);
+  await expect(boardRow(page, 'Unicode escape decode')).toHaveText('• —');
+  expect(names.length).toBeGreaterThan(0);
+  expect(names.every((url) => url.startsWith(ORIGIN))).toBe(true);
 });

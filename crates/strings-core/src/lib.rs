@@ -13,5 +13,6 @@ pub mod render;
 mod testing;
 
 pub use ops::hash::MultiHasher;
+pub use ops::unicode_escape::take_names_wanted;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

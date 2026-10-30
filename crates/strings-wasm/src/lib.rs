@@ -58,6 +58,13 @@ pub fn run_board(input: &[u8], options_json: &str) -> Result<String, JsError> {
     board::run_json(input, options_json).map_err(|e| JsError::new(&e))
 }
 
+/// Whether a decode met `\N{...}` since the last call without the name
+/// table, which only the `strings-wasm-names` build has.
+#[wasm_bindgen]
+pub fn take_names_wanted() -> bool {
+    strings_core::take_names_wanted()
+}
+
 /// Hashes a stream of chunks, for files too large to hold in memory.
 #[wasm_bindgen]
 pub struct Hasher(MultiHasher);
