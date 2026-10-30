@@ -27,18 +27,25 @@ pub struct OpMeta {
 pub enum Group {
     Case,
     Layout,
+    Translit,
     Encode,
     Hash,
 }
 
 impl Group {
-    pub const ALL: [Group; 4] =
-        [Group::Case, Group::Layout, Group::Encode, Group::Hash];
+    pub const ALL: [Group; 5] = [
+        Group::Case,
+        Group::Layout,
+        Group::Translit,
+        Group::Encode,
+        Group::Hash,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             Group::Case => "Case",
             Group::Layout => "Keyboard layout",
+            Group::Translit => "Transliteration",
             Group::Encode => "Encode",
             Group::Hash => "Hash",
         }
@@ -292,6 +299,15 @@ mod tests {
     #[test]
     fn groups_have_names() {
         let names: Vec<_> = Group::ALL.iter().map(|g| g.name()).collect();
-        assert_eq!(names, ["Case", "Keyboard layout", "Encode", "Hash"]);
+        assert_eq!(
+            names,
+            [
+                "Case",
+                "Keyboard layout",
+                "Transliteration",
+                "Encode",
+                "Hash"
+            ]
+        );
     }
 }

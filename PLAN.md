@@ -16,7 +16,8 @@ design canvas: https://claude.ai/artifact/QkSvYoirT1ta9rMnJ4dPkx
 |---|---|
 | Case | lower case, UPPER CASE, Title Case, Sentence case, iNVERT cASE, camelCase, PascalCase, snake_case, SCREAMING_SNAKE_CASE, kebab-case, SCREAMING-KEBAB, Train-Case, dot.case, path/case, flatcase |
 | Keyboard layout | Fix layout (auto-detect), and explicit pairs between English (US QWERTY), Russian (ЙЦУКЕН), Ukrainian, German (QWERTZ), French (AZERTY) |
-| Encode | Base64 encode / decode (standard + URL-safe, padding on/off), Base32 encode / decode (RFC 4648, padding on/off; Crockford later) |
+| Transliteration | Russian in Latin letters: GOST 7.79-2000 system B, passport names (МИД 4271 / МВД 995, ICAO Doc 9303), URL slugs by the Yandex and Google tables |
+| Encode | Base64 encode / decode (standard + URL-safe, padding on/off), Base32 encode / decode (RFC 4648, padding on/off; Crockford later), Punycode encode / decode (RFC 3492, whole text or `xn--` domain labels), URL encode / decode (RFC 3986 percent-encoding, optional `+` for spaces) |
 | Hash | MD5, SHA-1, SHA-224, SHA-256, SHA-384, SHA-512; output as hex, HEX or Base64 |
 
 **Note on "SHA-128":** no standard hash with that name exists. SHA-1 produces 160
@@ -24,7 +25,7 @@ bits, MD5 128 bits. The plan fills out the SHA-2 family (224/384) instead.
 If you meant something specific (SHA3-256, BLAKE3, a truncated SHA-256,
 CRC32…), add it to the Hash group — it is one more registry entry.
 
-Out of scope for v0.1: arbitrary regex ops, URL/HTML entity encoding, hex dump,
+Out of scope for v0.1: arbitrary regex ops, HTML entity encoding, hex dump,
 JSON formatting, file-to-file conversions. The architecture below keeps each of
 these a one-file addition.
 
@@ -55,6 +56,9 @@ crates/
     src/ops/layout/mod.rs
     src/ops/layout/tables.rs   # per-layout key maps
     src/ops/encode.rs
+    src/ops/punycode.rs
+    src/ops/url.rs
+    src/ops/translit.rs
     src/ops/hash.rs
   strings-wasm/        # wasm-bindgen exports only, no logic
     src/lib.rs
@@ -82,7 +86,7 @@ pub struct Op {
 pub struct OpMeta {
     pub id: &'static str,       // "case.snake", "hash.sha256"
     pub name: &'static str,     // "snake_case"
-    pub group: Group,           // Case | Layout | Encode | Hash
+    pub group: Group,           // Case | Layout | Translit | Encode | Hash
     pub params: &'static [ParamSpec], // enum / bool / string, with defaults
     pub example: &'static str,  // shown in the op list
 }
@@ -110,6 +114,7 @@ Recipe JSON: `[{"op":"layout.fix","params":{"to":"ru"}},{"op":"case.title"}]`.
 | MD5 / SHA-1 / SHA-2 | `md-5`, `sha1`, `sha2` (RustCrypto) | `default-features = false`; incremental `update()` enables chunked file hashing later |
 | Base64 and Base32 | `data-encoding` | *Decided:* one crate for both (no `base64`): RFC 4648 standard and URL-safe alphabets, padding on/off; Crockford/hex variants available later |
 | Word splitting for case styles | our own (`ops/words.rs`) | *Decided:* own splitter, no `heck` |
+| Punycode, URL encoding, transliteration | our own (`ops/punycode.rs`, `ops/url.rs`, `ops/translit.rs`) | *Decided (Oct 30, 2026):* no `idna` / `percent-encoding`: RFC 3492 is ~150 lines, and `idna` would add UTS 46 tables to the WASM. The domain mode lower-cases labels and applies no other IDNA mapping |
 | Bindings | `wasm-bindgen`, `serde`, `serde_json` | `serde-wasm-bindgen` is an alternative to JSON strings; JSON is simpler to debug |
 | Tests | `proptest` (dev) | round-trip properties |
 
@@ -346,9 +351,9 @@ Share links, saved recipes, file drop (chunked hashing for large files, progress
 header:
 
 - **Board** (layout C) — the default. One big input on an accent band; below it
-  every parameter-free op runs live in four sections (Case, Encode, Layout,
-  Hash), one row per op with a copy button. Clicking a row sends its value to
-  the input. Phone: same board, groups as tabs.
+  every parameter-free op runs live in five sections (Case, Encode, Layout,
+  Transliteration, Hash), one row per op with a copy button. Clicking a row
+  sends its value to the input. Phone: same board, groups as tabs.
 - **Recipe** (layout A) — for chains. Ops list with filter · recipe stack with
   per-step options, remove and reorder · input, output, step trace. The
   header's "Find operation · Ctrl K" palette adds ops to the recipe.

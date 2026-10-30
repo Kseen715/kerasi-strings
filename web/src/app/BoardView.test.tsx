@@ -101,7 +101,7 @@ describe('board mode', () => {
       within(tabs)
         .getAllByRole('tab')
         .map((t) => t.textContent),
-    ).toEqual(['Case', 'Keyboard layout', 'Encode', 'Hash']);
+    ).toEqual(['Case', 'Keyboard layout', 'Transliteration', 'Encode', 'Hash']);
     expect(screen.getByRole('heading', { name: 'Case' })).toBeVisible();
     await user.click(within(tabs).getByRole('tab', { name: 'Hash' }));
     expect(screen.getByRole('heading', { name: 'Hash' })).toBeVisible();

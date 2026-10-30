@@ -23,6 +23,7 @@ describe('metadata helpers', () => {
     expect(grouped(meta, meta.ops).map((g) => g.id)).toEqual([
       'case',
       'layout',
+      'translit',
       'encode',
       'hash',
     ]);

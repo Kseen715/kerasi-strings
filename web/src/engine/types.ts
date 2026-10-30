@@ -1,7 +1,7 @@
 // The shapes of what the engine returns: `ops_meta()`, the run report and
 // the board rows (crates/strings-core).
 
-export type GroupId = 'case' | 'layout' | 'encode' | 'hash';
+export type GroupId = 'case' | 'layout' | 'translit' | 'encode' | 'hash';
 
 export interface Choice {
   id: string;

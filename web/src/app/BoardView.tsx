@@ -22,13 +22,20 @@ const PHONE = '(width < 640px)';
 
 /** Sections are numbered in their desktop order; the phone tabs follow
  * the design and put layout before encode */
-const DESKTOP_ORDER: GroupId[] = ['case', 'encode', 'layout', 'hash'];
-const TAB_ORDER: GroupId[] = ['case', 'layout', 'encode', 'hash'];
+const DESKTOP_ORDER: GroupId[] = [
+  'case',
+  'encode',
+  'layout',
+  'translit',
+  'hash',
+];
+const TAB_ORDER: GroupId[] = ['case', 'layout', 'translit', 'encode', 'hash'];
 
 const SUBTITLES: Record<GroupId, (rows: number) => string> = {
   case: (rows) => `${rows} styles`,
-  encode: () => 'RFC 4648',
+  encode: () => 'RFC 4648 · 3492 · 3986',
   layout: () => 'keyboard',
+  translit: () => 'Russian',
   hash: (rows) => `${rows} hashes`,
 };
 
@@ -202,6 +209,7 @@ function Sections(props: SectionsProps) {
       <div className="board-col">
         {section('encode')}
         {section('layout')}
+        {section('translit')}
       </div>
       <div className="board-col board-wide">{section('hash')}</div>
     </div>
