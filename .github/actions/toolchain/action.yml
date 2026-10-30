@@ -1,0 +1,32 @@
+# Rust with the WebAssembly target, wasm-pack, and Node with the npm
+# packages of web/: what ci.yml and pages.yml build with.
+name: Toolchain
+description: Rust, wasm-pack and Node for building the app
+
+inputs:
+  components:
+    description: extra rustup components
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+        components: ${{ inputs.components }}
+
+    - uses: Swatinem/rust-cache@v2
+
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-pack
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: web/package-lock.json
+
+    - shell: bash
+      run: npm ci --prefix web

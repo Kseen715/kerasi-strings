@@ -1,0 +1,55 @@
+# Adds one suite's coverage to the README badge. The numbers live on the
+# branch "badges" (web/scripts/coverage-badge.ts), where shields.io reads
+# them. ci.yml runs it on pushes to main; its jobs can push at the same
+# time, so a push that loses starts over from the branch as it is.
+name: Coverage badge
+description: Adds the lcov report of one suite of tests to the coverage
+  badge
+
+inputs:
+  suite:
+    description: rust or web
+    required: true
+  lcov:
+    description: the suite's lcov report
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # The script is TypeScript, which Node runs from version 24 on
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+
+    - shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+        LCOV: ${{ inputs.lcov }}
+      run: |
+        lcov=$(realpath "$LCOV")
+        script="$GITHUB_WORKSPACE/web/scripts/coverage-badge.ts"
+        badges="$RUNNER_TEMP/badges"
+        git worktree add -q --detach "$badges"
+        cd "$badges"
+        git config user.name 'github-actions[bot]'
+        git config user.email \
+          '41898299+github-actions[bot]@users.noreply.github.com'
+
+        for attempt in 1 2 3 4 5; do
+          if git fetch -q origin badges; then
+            git checkout -qf --detach FETCH_HEAD
+          else
+            git checkout -qf --orphan badges-new
+            git rm -rqf .
+          fi
+          git clean -qfdx
+
+          node "$script" . "$SUITE" "$lcov"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -qm "Coverage of $SUITE at ${GITHUB_SHA::7}"
+          git push -q origin HEAD:refs/heads/badges && exit 0
+          sleep "$attempt"
+        done
+        exit 1

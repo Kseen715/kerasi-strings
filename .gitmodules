@@ -1,0 +1,3 @@
+[submodule "vendor/kerasi-design"]
+	path = vendor/kerasi-design
+	url = https://github.com/Kseen715/kerasi-design.git

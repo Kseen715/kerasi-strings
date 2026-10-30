@@ -51,6 +51,10 @@ and ask the user before adding it.
 
 - When you add, remove or upgrade a crate or npm package, or bundle a new font,
   icon set or image, update the third-party notices the site ships with it.
+  The build writes `THIRD-PARTY-NOTICES.txt` from what it contains
+  (`web/build/notices.ts`); check the result, and keep its `ALLOWED`
+  licenses, `WORKBOX` list and `deny.toml` in step. Something it cannot
+  see (a file copied into `web/public`, say) needs its notice added there.
 - Only add a dependency whose license allows redistribution in a public static
   site (MIT, Apache-2.0, BSD, ISC, Zlib, OFL, MPL-2.0 and similar). If a
   license is unclear, stop and ask the user. Do not guess.

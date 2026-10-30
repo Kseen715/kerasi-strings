@@ -65,14 +65,18 @@ source of truth, one test suite, identical Unicode behaviour everywhere, and the
 UI never needs per-op code. The UI is generated from op metadata.
 
 **Data model.** Every op is `fn(&[u8], &Params) -> Result<Vec<u8>, OpError>`.
+*Built (Oct 29, 2026):* an `Op` is a plain struct, `OpMeta` plus that
+function pointer, instead of a trait: every op is data in a static table,
+which is all the registry needs. `Params` are checked against the specs
+and completed with defaults before an op runs, so ops never see bad values.
 Text ops decode UTF-8 first and fail with a clear error on invalid input;
 Base64 decode may produce arbitrary bytes, so chaining stays lossless. The UI
 renders bytes as UTF-8 when valid, otherwise as a hex view with a notice.
 
 ```rust
-pub trait Op: Sync {
-    fn meta(&self) -> &'static OpMeta;          // id, name, group, params, example
-    fn run(&self, input: &[u8], p: &Params) -> Result<Vec<u8>, OpError>;
+pub struct Op {
+    pub meta: OpMeta,                            // id, name, group, params, example
+    pub run: fn(&[u8], &Params) -> Result<Vec<u8>, OpError>,
 }
 
 pub struct OpMeta {
@@ -88,9 +92,14 @@ pub struct OpMeta {
 
 | Export | Purpose |
 |---|---|
-| `ops_meta() -> String` | JSON array of `OpMeta`; UI builds lists, forms, search index from it |
-| `run(recipe_json: &str, input: &[u8]) -> Result<RunResult, JsError>` | Run a chain; returns output bytes plus per-step trace (output preview, error, duration) |
-| `run_board(input: &[u8]) -> String` | Run every parameter-free op once on the same input; powers the "all at once" board in one call |
+| `version() -> String` | The engine version |
+| `ops_meta() -> String` | JSON `{version, groups, ops}`; UI builds lists, forms, search index from it |
+| `run(recipe_json: &str, input: &[u8]) -> Result<RunResult, JsError>` | Run a chain; `RunResult.output` is the bytes, `.report` JSON with the shown output and per-step trace (status, preview, bytes, error with offset, duration) |
+| `run_board(input: &[u8], options_json: &str) -> Result<String, JsError>` | Every op once on the same input, plus variants (Base64 URL); board-wide options (`format`, `to`) reach the ops that declare them |
+| `Hasher::new(ops, format)`, `.update(chunk)`, `.finish()` | Several hashes over a stream of chunks, for files of any size |
+
+Showing bytes is the engine's job too: valid UTF-8 as text, anything else
+as hex pairs (`render.rs`), so the UI never decodes or formats bytes.
 
 Recipe JSON: `[{"op":"layout.fix","params":{"to":"ru"}},{"op":"case.title"}]`.
 
@@ -99,9 +108,8 @@ Recipe JSON: `[{"op":"layout.fix","params":{"to":"ru"}},{"op":"case.title"}]`.
 | Need | Crate | Notes |
 |---|---|---|
 | MD5 / SHA-1 / SHA-2 | `md-5`, `sha1`, `sha2` (RustCrypto) | `default-features = false`; incremental `update()` enables chunked file hashing later |
-| Base64 | `base64` | standard + URL-safe engines, padding config |
-| Base32 | `data-encoding` | RFC 4648 with/without padding; Crockford/hex variants available later |
-| Word splitting for case styles | `heck`, or ~150 lines of our own | Decide in phase 1: `heck` covers camel/snake/kebab/train/shouty; dot/path/flat and the "keep punctuation" Title Case need our own anyway. Writing our own splitter (below) removes the dependency and keeps behaviour in one place — recommended |
+| Base64 and Base32 | `data-encoding` | *Decided:* one crate for both (no `base64`): RFC 4648 standard and URL-safe alphabets, padding on/off; Crockford/hex variants available later |
+| Word splitting for case styles | our own (`ops/words.rs`) | *Decided:* own splitter, no `heck` |
 | Bindings | `wasm-bindgen`, `serde`, `serde_json` | `serde-wasm-bindgen` is an alternative to JSON strings; JSON is simpler to debug |
 | Tests | `proptest` (dev) | round-trip properties |
 
@@ -115,6 +123,9 @@ Release profile: `opt-level = "z"`, `lto = true`, `codegen-units = 1`,
 - Split on lower→upper (`fooBar` → foo|Bar).
 - Split acronyms before the last capital: `XMLHttpRequest` → XML|Http|Request.
 - Digits stick to the preceding word (`utf8Value` → utf8|Value); option later.
+  A capital after a digit starts a word only when lower case follows it,
+  so upper-casing never splits a word (`UTF8VALUE`, `3D` stay one word)
+  and `snake(snake(x)) == snake(x)` holds.
 - Unicode letters count as letters (`привет мир` → `приветМир`).
 
 **Simple case ops** use Rust's full Unicode mapping (`to_uppercase()` can grow a
@@ -131,6 +142,12 @@ pass through unchanged.
 - `Fix layout (auto)`: score input against every layout's letter set; pick the
   source with the most hits, convert to the target param (default: the other
   side of the most likely EN↔RU pair). Show the detected source in the UI.
+  *Built:* one op `layout.fix` with `from` (auto or a layout) and `to` (auto
+  or a layout) covers the explicit pairs; `layout.detect` names the source.
+  Ties go to the layout listed first (en, ru, uk, de, fr); with no letter
+  at all, auto leaves the text alone. Tables follow the default X keyboard
+  layouts (`us`, `ru`, `ua`, `de`, `fr`); dead keys stand for their
+  spacing character.
 - Tables live in `tables.rs` as `const` arrays; tests assert they're bijective
   over letters and cover all 47 printable keys.
 - Start with en-US, ru, uk, de, fr. Adding a layout = one table + one enum
@@ -144,7 +161,10 @@ reject other invalid characters with an error that names the offending offset.
 
 ### 2.4 Front end
 
-- **Stack:** Vite + TypeScript + React 18. React because the Kerasi components
+- **Stack:** Vite + TypeScript + React 18. *Built with* Vite 8, TypeScript
+  6.0 (typescript-eslint supports < 6.1), ESLint 9 (eslint-plugin-jsx-a11y
+  supports ≤ 9), React 18.3 (the design system's `.d.ts` use the global
+  `JSX` namespace that React 19 types dropped), Prettier, Stylelint. React because the Kerasi components
   are React (`.jsx`, inline styles reading CSS tokens) — we use them directly
   rather than re-implementing.
 - **Design system consumption:** `kerasi-design` as a git submodule in
@@ -154,8 +174,14 @@ reject other invalid characters with an error that names the offending offset.
   overrides replace network-dependent pieces without forking:
   - `components/core/Icon.jsx` → `web/src/ds/Icon.tsx`, same props, icons
     imported at build time from the `lucide-static` npm package (`?raw`).
+    *Built* as a `resolveId` plugin (`web/build/kerasi.ts`) that matches the
+    resolved file, not the import string; it also stops the build if
+    `tokens/fonts.css` is imported.
   - Fonts: Oswald, Manrope, JetBrains Mono self-hosted as WOFF2 (from
-    `@fontsource/*` packages), subset to Latin + Cyrillic.
+    `@fontsource-variable/*` packages), subset to Latin + Cyrillic.
+  - The design system's Radio, Switch and Checkbox cannot be reached by
+    keyboard, so `web/src/ds/` has app-only `Segmented` and `Toggle` drawn
+    the same way. Worth fixing upstream.
 - **Worker:** `engine.worker.ts` loads the WASM once and handles
   `{id, kind: "run" | "board", recipe, input: ArrayBuffer}` messages
   (input transferred, not copied). Main thread keeps only the latest request id,
@@ -165,7 +191,13 @@ reject other invalid characters with an error that names the offending offset.
   - Recipe, mode (board/recipe), theme → `localStorage`.
   - Input is **not** persisted by default (it may be a secret); opt-in toggle.
   - Share link: recipe in the URL fragment (`#r=<base64url json>`). Fragments
-    are never sent to the server; input is excluded unless explicitly ticked.
+    are never sent to the server; input is excluded unless explicitly ticked
+    (`&i=<base64url text>`). The engine does the Base64url. After a link is
+    opened the fragment is removed from the address bar.
+  - Files: a dropped file up to 1 MB that is valid UTF-8 becomes text;
+    anything else stays a file. Recipes run on files up to 64 MB; the board
+    shows the six hashes of a file of any size, read in 4 MB chunks with
+    progress.
 - **Themes:** all six Kerasi themes via `data-theme` on `<html>`; default
   follows `prefers-color-scheme` (Sakura / Sakura dark).
 - **Accessibility:** real buttons/inputs, keyboard-only flow (Ctrl K palette,
@@ -190,8 +222,16 @@ reject other invalid characters with an error that names the offending offset.
    any request goes to an origin other than the page's own.
 5. **Offline:** a service worker (`vite-plugin-pwa`, precache only) makes the
    app work with the network off — a visible proof for the user.
-6. **Footer badge** "Local only · 0 requests" backed by a real counter
-   (`PerformanceObserver` on resource entries after load).
+6. **Header badge** "Local only · 0 requests" backed by a real counter
+   (`PerformanceObserver` on resource entries, buffered): the number is the
+   requests that reached another origin; its tooltip adds the files loaded
+   from the site and the requests the CSP blocked
+   (`securitypolicyviolation`).
+7. **Notices:** every build writes `THIRD-PARTY-NOTICES.txt` from what it
+   actually contains (`web/build/notices.ts`: bundle modules and assets,
+   the crates of `cargo metadata`, the Workbox runtime) and stops on a
+   license outside its allowed list; `cargo deny` (`deny.toml`) checks the
+   crates with the same list.
 
 ---
 
@@ -254,13 +294,15 @@ Repository setting: Pages source = GitHub Actions.
 | WASM | one `wasm-bindgen-test` smoke test per export in headless browser |
 | UI | Vitest + Testing Library for recipe editing, palette search, stale-result dropping |
 | E2E | Playwright: type → see outputs, copy, file drop hash, share link, offline reload, **no off-origin requests** |
-| Budgets | CI fails if gzipped WASM > 150 KB or JS > 120 KB |
+| Budgets | CI fails if gzipped WASM > 150 KB or JS > 120 KB (`npm run budget`) |
+| Coverage | `cargo llvm-cov` and Vitest lcov; on `main` CI pushes the line totals to the `badges` branch for the README badge |
 
 ---
 
 ## 6. Phases
 
-Each phase ends deployable.
+Each phase ends deployable. *Status (Oct 29, 2026):* phases 0–6 are built
+and tested locally; the Pages deploy runs once the repository is pushed.
 
 **Phase 0 — Skeleton & pipeline (½ day)**
 Cargo workspace, Vite app, submodule, CI + Pages deploy of a page that calls a
@@ -335,7 +377,8 @@ engine call each (`run_board`, `run`).
 
 ## 8. Open questions
 
-1. "SHA-128" — what did you mean? (see §1)
+1. "SHA-128" — what did you mean? (see §1) For now the six hashes of §1
+   ship; add SHA-3, BLAKE3 or CRC32 when wanted.
 2. ~~Which layout(s)?~~ Decided: A + C (§7).
 3. Layout list beyond en/ru/uk/de/fr? (Belarusian, Kazakh, Hebrew, Greek are
    straightforward table additions.)

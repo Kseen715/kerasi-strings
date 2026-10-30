@@ -1,0 +1,40 @@
+# cargo deny check: the licenses, sources and advisories of every crate.
+# The allowed licenses match ALLOWED in web/build/notices.ts (AGENTS.md).
+
+[graph]
+targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-gnu"]
+all-features = false
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "Unlicense",
+    "Unicode-3.0",
+    "MPL-2.0",
+]
+confidence-threshold = 0.93
+# The list is the policy, not an inventory of what is in use today
+unused-allowed-license = "allow"
+
+# The workspace crates have no license yet; it is chosen as components
+# are added (AGENTS.md)
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+
+[advisories]
+yanked = "deny"

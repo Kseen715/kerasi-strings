@@ -1,0 +1,6 @@
+node_modules
+dist
+coverage
+src/wasm
+playwright-report
+test-results

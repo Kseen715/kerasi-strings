@@ -1,0 +1,12 @@
+/*
+ * The Kerasi tokens, file by file: tokens/fonts.css is left out because
+ * it loads Google Fonts; ds/fonts.css serves the same fonts locally.
+ */
+@import '@kerasi/tokens/palette.css';
+@import '@kerasi/tokens/themes.css';
+@import '@kerasi/tokens/syntax.css';
+@import '@kerasi/tokens/typography.css';
+@import '@kerasi/tokens/spacing.css';
+@import '@kerasi/tokens/base.css';
+@import './ds/fonts.css';
+@import './app/app.css';

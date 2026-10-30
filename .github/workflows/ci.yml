@@ -1,0 +1,140 @@
+# Checks every push to main and every pull request: formatting, lints,
+# types and tests of the Rust engine and the web app, the WebAssembly in a
+# headless browser, the size budgets and the end-to-end tests of the
+# built site. On main, the tests' coverage goes into the README badge
+# (.github/actions/coverage-badge).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy, llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: >
+          cargo llvm-cov --package strings-core --locked
+          --lcov --output-path "$RUNNER_TEMP/rust.lcov"
+
+      - if: github.event_name == 'push'
+        uses: ./.github/actions/coverage-badge
+        with:
+          suite: rust
+          lcov: ${{ runner.temp }}/rust.lcov
+
+  # Licenses, sources and advisories of every crate (deny.toml)
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      # The runner image has Chrome and a matching chromedriver
+      - name: Test in headless Chrome
+        env:
+          CHROMEDRIVER: ${{ env.CHROMEWEBDRIVER }}/chromedriver
+        run: wasm-pack test --headless --chrome crates/strings-wasm
+
+  web:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - uses: ./.github/actions/toolchain
+
+      - name: Build the WebAssembly
+        run: npm run wasm
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run coverage
+
+      - if: github.event_name == 'push'
+        uses: ./.github/actions/coverage-badge
+        with:
+          suite: web
+          lcov: web/coverage/lcov.info
+
+      - name: Build
+        run: npm run build
+
+      - name: Size budgets
+        run: npm run budget
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm run e2e
+
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: web/test-results
+          if-no-files-found: ignore
+
+  workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Lint the workflows
+        uses: docker://rhysd/actionlint:1.7.7
+        with:
+          args: -color
