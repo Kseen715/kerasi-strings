@@ -1,9 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 // The end-to-end tests run against the production build (npm run build),
-// served as GitHub Pages serves it: under /kerasi-strings/.
+// served as GitHub Pages serves it: at the root of strings.kerasi.gripe.
 const PORT = 4173;
-export const BASE = `http://localhost:${PORT}/kerasi-strings/`;
+export const BASE = `http://localhost:${PORT}/`;
 
 export default defineConfig({
   testDir: 'tests/e2e',

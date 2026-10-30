@@ -6,7 +6,7 @@ import { KERASI, devWithoutCsp, kerasiOffline } from './build/kerasi.ts';
 import { notices } from './build/notices.ts';
 
 export default defineConfig({
-  base: '/kerasi-strings/',
+  base: '/',
   plugins: [
     kerasiOffline(),
     devWithoutCsp(),

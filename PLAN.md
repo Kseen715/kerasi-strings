@@ -244,7 +244,7 @@ kerasi-strings/
   crates/strings-wasm/
   web/
     index.html               # CSP meta, favicon
-    vite.config.ts           # base: '/kerasi-strings/', DS aliases, PWA
+    vite.config.ts           # base: '/', DS aliases, PWA
     src/
       main.tsx
       app/                   # App, BoardView, RecipeView, CommandPalette
@@ -382,8 +382,8 @@ engine call each (`run_board`, `run`).
 2. ~~Which layout(s)?~~ Decided: A + C (§7).
 3. Layout list beyond en/ru/uk/de/fr? (Belarusian, Kazakh, Hebrew, Greek are
    straightforward table additions.)
-4. Repository name / Pages path — plan assumes `kerasi-strings` →
-   `https://<user>.github.io/kerasi-strings/`.
+4. ~~Repository name / Pages path?~~ Decided: custom domain
+   `https://strings.kerasi.gripe/`, served from the root (`base: '/'`).
 5. ~~Logo and favicon?~~ Decided: mark **E — Literal** (the sun on the
    blade ground between an opening and a closing chamfered quote mark). The
    favicon is the same mark, built like the main Kerasi favicon: redrawn on a
